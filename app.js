@@ -123,17 +123,34 @@ function renderQuests() {
   }
 
   empty.classList.add('hidden');
-  list.innerHTML = quests.map(q => `
-    <div class="quest-item ${q.done ? 'done' : ''}" id="quest-${q.id}">
-      <input class="quest-checkbox" type="checkbox" ${q.done ? 'checked' : ''}
-             onchange="toggleDone(${q.id})" title="완료 처리" />
-      <div class="quest-content">
-        <div class="quest-fantasy">${escapeHtml(q.fantasy)}</div>
-        <div class="quest-original">원문: ${escapeHtml(q.original)}</div>
-      </div>
-      <button class="quest-delete" onclick="deleteQuest(${q.id})" title="삭제">✕</button>
-    </div>
-  `).join('');
+  list.innerHTML = '';
+
+  quests.forEach(q => {
+    const item = document.createElement('div');
+    item.className = `quest-item${q.done ? ' done' : ''}`;
+    item.dataset.id = q.id;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'quest-checkbox';
+    checkbox.checked = q.done;
+    checkbox.title = '완료 처리';
+
+    const content = document.createElement('div');
+    content.className = 'quest-content';
+    content.innerHTML = `
+      <div class="quest-fantasy">${escapeHtml(q.fantasy)}</div>
+      <div class="quest-original">원문: ${escapeHtml(q.original)}</div>
+    `;
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'quest-delete';
+    delBtn.title = '삭제';
+    delBtn.textContent = '✕';
+
+    item.append(checkbox, content, delBtn);
+    list.appendChild(item);
+  });
 }
 
 // ── Toast ─────────────────────────────────────────────
@@ -160,6 +177,26 @@ function escapeHtml(str) {
 // ── Init ──────────────────────────────────────────────
 
 (function init() {
+  document.getElementById('saveKeyBtn').addEventListener('click', saveApiKey);
+  document.getElementById('addBtn').addEventListener('click', addQuest);
+  document.getElementById('todoInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addQuest();
+  });
+
+  // 이벤트 위임: 퀘스트 목록의 체크박스·삭제 버튼
+  document.getElementById('questList').addEventListener('change', e => {
+    const item = e.target.closest('.quest-item');
+    if (item && e.target.classList.contains('quest-checkbox')) {
+      toggleDone(Number(item.dataset.id));
+    }
+  });
+  document.getElementById('questList').addEventListener('click', e => {
+    const item = e.target.closest('.quest-item');
+    if (item && e.target.classList.contains('quest-delete')) {
+      deleteQuest(Number(item.dataset.id));
+    }
+  });
+
   if (getApiKey()) showApiStatus('✅ API Key가 봉인되어 있습니다.');
   renderQuests();
 })();
