@@ -7,7 +7,7 @@ let quests = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
 function saveApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key.startsWith('sk-ant-')) {
+  if (!key.startsWith('AIza')) {
     showToast('유효하지 않은 API Key 형식입니다.');
     return;
   }
@@ -25,7 +25,16 @@ function showApiStatus(msg) {
   document.getElementById('apiStatus').textContent = msg;
 }
 
-// ── Claude API ───────────────────────────────────────
+// ── Gemini API ───────────────────────────────────────
+
+const SYSTEM_PROMPT = `당신은 중세 판타지 세계의 고결한 퀘스트 기록관입니다.
+사용자가 입력한 현대적인 할 일을 중세 판타지 스타일의 퀘스트 설명으로 변환하세요.
+규칙:
+- 1~2문장으로 간결하게
+- 고어체와 판타지 어휘 사용 (예: "수배", "현자", "왕국", "마법", "용사", "여정")
+- 과장되게 웅장하게 표현
+- 한국어로 답변
+- 퀘스트 설명만 출력하고 다른 설명 없이`;
 
 async function transformToFantasy(task) {
   const apiKey = getApiKey();
@@ -33,26 +42,14 @@ async function transformToFantasy(task) {
     throw new Error('API Key가 없습니다. 먼저 Key를 봉인하십시오.');
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: `당신은 중세 판타지 세계의 고결한 퀘스트 기록관입니다.
-사용자가 입력한 현대적인 할 일을 중세 판타지 스타일의 퀘스트 설명으로 변환하세요.
-규칙:
-- 1~2문장으로 간결하게
-- 고어체와 판타지 어휘 사용 (예: "수배", "현자", "왕국", "마법", "용사", "여정")
-- 과장되게 웅장하게 표현
-- 한국어로 답변
-- 퀘스트 설명만 출력하고 다른 설명 없이`,
-      messages: [{ role: 'user', content: task }],
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: task }] }],
+      generationConfig: { maxOutputTokens: 200 },
     }),
   });
 
@@ -62,7 +59,7 @@ async function transformToFantasy(task) {
   }
 
   const data = await response.json();
-  return data.content[0].text.trim();
+  return data.candidates[0].content.parts[0].text.trim();
 }
 
 // ── Quest Management ─────────────────────────────────
