@@ -7,8 +7,8 @@ let quests = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
 function saveApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key.startsWith('AIza')) {
-    showToast('유효하지 않은 API Key 형식입니다.');
+  if (!key) {
+    showToast('API Key를 입력하십시오.');
     return;
   }
   localStorage.setItem(API_KEY_KEY, key);
