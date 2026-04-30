@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo Fantassy — 퀘스트 기록서</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="parchment-wrapper">
+    <header>
+      <div class="crest">⚔️</div>
+      <h1>Todo Fantassy</h1>
+      <p class="subtitle">— 그대의 사소한 임무를 위대한 퀘스트로 —</p>
+    </header>
+
+    <section class="api-section" id="apiSection">
+      <label for="apiKeyInput">🔑 Anthropic API Key</label>
+      <div class="api-row">
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-..." />
+        <button id="saveKeyBtn" onclick="saveApiKey()">봉인</button>
+      </div>
+      <p class="api-hint" id="apiStatus"></p>
+    </section>
+
+    <section class="quest-input-section">
+      <label for="todoInput">📜 오늘의 임무를 고하라</label>
+      <div class="input-row">
+        <input type="text" id="todoInput" placeholder="예: 마트에서 장 보기" maxlength="200"
+               onkeydown="if(event.key==='Enter') addQuest()" />
+        <button id="addBtn" onclick="addQuest()">
+          <span id="addBtnText">퀘스트 등록</span>
+          <span id="addBtnSpinner" class="spinner hidden"></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="quest-list-section">
+      <h2>📖 퀘스트 일람</h2>
+      <div id="questList" class="quest-list">
+        <p class="empty-state" id="emptyState">아직 등록된 퀘스트가 없습니다.<br/>그대의 첫 번째 임무를 고하십시오.</p>
+      </div>
+    </section>
+
+    <footer>
+      <p>Powered by <a href="https://anthropic.com" target="_blank">Anthropic Claude</a></p>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
