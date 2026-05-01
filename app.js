@@ -1,28 +1,12 @@
 const STORAGE_KEY = 'todofantassy_quests';
-const API_KEY_KEY = 'todofantassy_api_key';
+const API_KEY = 'AIzaSyCKFZjrX0FlK3WG_KTDFybX8evKj5U45Dw';
 
 let quests = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
 // ── API Key ──────────────────────────────────────────
 
-function saveApiKey() {
-  const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) {
-    showToast('API Key를 입력하십시오.');
-    return;
-  }
-  localStorage.setItem(API_KEY_KEY, key);
-  document.getElementById('apiKeyInput').value = '';
-  showApiStatus('✅ API Key가 봉인되었습니다. (브라우저 로컬 저장소)');
-  showToast('API Key 봉인 완료!');
-}
-
 function getApiKey() {
-  return localStorage.getItem(API_KEY_KEY) || '';
-}
-
-function showApiStatus(msg) {
-  document.getElementById('apiStatus').textContent = msg;
+  return API_KEY;
 }
 
 // ── Gemini API ───────────────────────────────────────
@@ -177,7 +161,6 @@ function escapeHtml(str) {
 // ── Init ──────────────────────────────────────────────
 
 (function init() {
-  document.getElementById('saveKeyBtn').addEventListener('click', saveApiKey);
   document.getElementById('addBtn').addEventListener('click', addQuest);
   document.getElementById('todoInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') addQuest();
@@ -197,6 +180,5 @@ function escapeHtml(str) {
     }
   });
 
-  if (getApiKey()) showApiStatus('✅ API Key가 봉인되어 있습니다.');
   renderQuests();
 })();
