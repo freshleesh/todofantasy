@@ -1,4 +1,5 @@
 /* ── Reset & Base ─────────────────────────────────── */
+/* v2024-05-expanded */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -200,6 +201,7 @@ button:disabled {
   border-radius: 2px;
   padding: 0.8rem 1rem;
   animation: fadeIn 0.3s ease;
+  cursor: pointer;
 }
 
 .quest-item.done {
@@ -211,6 +213,8 @@ button:disabled {
   text-decoration: line-through;
   color: var(--ink-light);
 }
+
+.quest-item.expanded { }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-6px); }
@@ -240,6 +244,11 @@ button:disabled {
   font-style: italic;
   color: var(--ink-light);
   margin-top: 0.3rem;
+  display: none;
+}
+
+.quest-item.expanded .quest-original {
+  display: block;
 }
 
 .quest-delete {

@@ -112,6 +112,11 @@ function renderQuests() {
       <div class="quest-fantasy">${escapeHtml(q.fantasy)}</div>
       <div class="quest-original">원문: ${escapeHtml(q.original)}</div>
     `;
+    content.style.cursor = 'pointer';
+    content.addEventListener('click', e => {
+      e.stopPropagation();
+      item.classList.toggle('expanded');
+    });
 
     const delBtn = document.createElement('button');
     delBtn.className = 'quest-delete';
