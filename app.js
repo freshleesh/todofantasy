@@ -9,17 +9,6 @@ function getApiKey() {
   return API_KEY;
 }
 
-// ── Gemini API ───────────────────────────────────────
-
-const SYSTEM_PROMPT = `당신은 중세 판타지 세계의 고결한 퀘스트 기록관입니다.
-사용자가 입력한 현대적인 할 일을 중세 판타지 스타일의 퀘스트 설명으로 변환하세요.
-규칙:
-- 1~2문장으로 간결하게
-- 고어체와 판타지 어휘 사용 (예: "수배", "현자", "왕국", "마법", "용사", "여정")
-- 과장되게 웅장하게 표현
-- 한국어로 답변
-- 퀘스트 설명만 출력하고 다른 설명 없이`;
-
 async function transformToFantasy(task) {
   const apiKey = getApiKey();
   if (!apiKey) {
@@ -100,13 +89,10 @@ function renderQuests() {
   const empty = document.getElementById('emptyState');
 
   if (quests.length === 0) {
-    list.innerHTML = '';
-    list.appendChild(empty);
-    empty.classList.remove('hidden');
+    list.innerHTML = '<p class="empty-state" id="emptyState">아직 등록된 퀘스트가 없습니다.<br/>그대의 첫 번째 임무를 고하십시오.</p>';
     return;
   }
 
-  empty.classList.add('hidden');
   list.innerHTML = '';
 
   quests.forEach(q => {
