@@ -1,28 +1,45 @@
 // ── Constants ────────────────────────────────────────
 
 const STORAGE_KEY = 'todofantassy_v2';
-const GEMINI_URL = '/api/gemini';
+const PROXY_URL = '/api/gemini';
+const GEMINI_DIRECT_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'leftHand', 'rightHand'];
 
-const STAT_POINTS_PER_LEVEL = 5;
 const xpToNext = (level) => level * 100;
-
-const XP_BY_DIFFICULTY = { '하': 10, '중': 25, '상': 60 };
 
 const BASE_SLOT_COOLDOWN_MS = 120 * 60 * 1000;
 const STR_COOLDOWN_REDUCTION_MS = 5 * 60 * 1000;
 const MIN_SLOT_COOLDOWN_MS = 20 * 60 * 1000;
 const MAX_QUEST_SLOTS = 3;
 
-const BASE_DROP_RATE = 0.30;
-const LUK_DROP_BONUS = 0.02;
-const MAX_DROP_RATE = 0.90;
-const BASE_UNIQUE_RATE = 0.05;
-const LUK_UNIQUE_BONUS = 0.01;
-const MAX_UNIQUE_RATE = 0.50;
-
 const INT_XP_BONUS = 0.05;
+
+// ── Card / Deck ──────────────────────────────────────
+
+const CARD_DEFS = {
+  xp1:         { name: '경험치 +1',        label: 'XP +1',     effect: { xp: 1 } },
+  xp2:         { name: '경험치 +2',        label: 'XP +2',     effect: { xp: 2 } },
+  xp3:         { name: '경험치 +3',        label: 'XP +3',     effect: { xp: 3 } },
+  item_normal: { name: '일반 아이템 획득', label: '⚔ 일반',   effect: { drop: 'normal' } },
+  item_unique: { name: '유니크 아이템 획득', label: '✨ 유니크', effect: { drop: 'unique' } },
+  curse:       { name: '저주 (꽝)',        label: '💀 저주',   effect: {} },
+  draw_extra:  { name: '카드 +2 드로우',   label: '🎴 +2 드로우', cast: 'draw2', desc: '뽑을 시 시전' },
+  xp_bonus:    { name: '즉시 +1 XP',       label: '⚡ XP+1 즉시', cast: 'xp1', desc: '뽑을 시 시전' },
+};
+
+const DRAW_BY_DIFFICULTY = { '하': 1, '중': 2, '상': 3 };
+
+function defaultDeck() {
+  return [
+    'curse',
+    'item_unique',
+    'item_normal', 'item_normal', 'item_normal',
+    'xp3', 'xp3', 'xp3',
+    'xp2', 'xp2', 'xp2', 'xp2', 'xp2',
+    'xp1', 'xp1', 'xp1', 'xp1', 'xp1', 'xp1', 'xp1',
+  ];
+}
 
 // ── State ────────────────────────────────────────────
 
@@ -34,7 +51,8 @@ function defaultState() {
       level: 1,
       xp: 0,
       stats: { str: 0, luk: 0, int: 0 },
-      pendingStatPoints: 0,
+      deck: defaultDeck(),
+      pendingLevelUps: 0,
       inventory: [],
       equipped: { head: null, body: null, legs: null, feet: null, hands: null, leftHand: null, rightHand: null },
       questSlots: { available: MAX_QUEST_SLOTS, lastRecoveredAt: Date.now() },
@@ -45,17 +63,25 @@ function defaultState() {
 
 let state = loadState();
 
+// 카드 픽/덱 선택의 임시 컨텍스트 (localStorage에 저장 X)
+let currentRewardCtx = null;
+let deckSelectAction = null;
+
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return defaultState();
   try {
     const parsed = JSON.parse(raw);
-    // 누락 필드 보강
     const def = defaultState();
     parsed.character = { ...def.character, ...parsed.character };
     parsed.character.stats = { ...def.character.stats, ...parsed.character.stats };
     parsed.character.equipped = { ...def.character.equipped, ...parsed.character.equipped };
     parsed.character.questSlots = { ...def.character.questSlots, ...parsed.character.questSlots };
+    if (!Array.isArray(parsed.character.deck) || parsed.character.deck.length === 0) {
+      parsed.character.deck = defaultDeck();
+    }
+    parsed.character.pendingLevelUps ||= 0;
+    delete parsed.character.pendingStatPoints;
     parsed.quests ||= [];
     return parsed;
   } catch {
@@ -116,24 +142,59 @@ function gainXp(baseXp) {
   const gained = Math.round(baseXp * (1 + int * INT_XP_BONUS));
   const c = state.character;
   c.xp += gained;
-  let levelsGained = 0;
   while (c.xp >= xpToNext(c.level)) {
     c.xp -= xpToNext(c.level);
     c.level += 1;
-    c.pendingStatPoints += STAT_POINTS_PER_LEVEL;
-    levelsGained += 1;
+    c.pendingLevelUps += 1;
   }
-  return { gained, levelsGained };
+  return gained;
 }
 
-function rollDrop() {
-  const { luk } = totalStats();
-  const dropRate = Math.min(MAX_DROP_RATE, BASE_DROP_RATE + luk * LUK_DROP_BONUS);
-  if (Math.random() >= dropRate) return null;
-  const uniqueRate = Math.min(MAX_UNIQUE_RATE, BASE_UNIQUE_RATE + luk * LUK_UNIQUE_BONUS);
-  const isUnique = Math.random() < uniqueRate;
-  const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-  return { slot, isUnique };
+// ── Reward Deck ──────────────────────────────────────
+
+function drawReward(difficulty) {
+  const baseN = DRAW_BY_DIFFICULTY[difficulty] || 1;
+  const pool = [...state.character.deck];
+  const drawn = [];
+  let toDraw = baseN;
+  while (toDraw > 0 && pool.length > 0) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const cardId = pool.splice(idx, 1)[0];
+    drawn.push(cardId);
+    toDraw -= 1;
+    if (CARD_DEFS[cardId].cast === 'draw2') toDraw += 2;
+  }
+  return drawn;
+}
+
+function partitionDrawn(drawn) {
+  const cast = [];
+  const candidates = [];
+  for (const c of drawn) {
+    (CARD_DEFS[c].cast ? cast : candidates).push(c);
+  }
+  return { cast, candidates };
+}
+
+async function applyChosenCard(cardId, questFantasy) {
+  const def = CARD_DEFS[cardId];
+  const eff = def.effect || {};
+  if (eff.xp) {
+    const gained = gainXp(eff.xp);
+    showToast(`경험치 +${gained}`);
+  } else if (eff.drop) {
+    const isUnique = eff.drop === 'unique';
+    const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
+    try {
+      const item = await generateEquipment(slot, isUnique, questFantasy);
+      state.character.inventory.unshift(item);
+      showToast(`${isUnique ? '✨ 유니크 ' : ''}장비 획득 — ${item.name}`);
+    } catch (e) {
+      showToast('보물 생성 실패: ' + e.message);
+    }
+  } else {
+    showToast('💀 저주 — 보상이 없다');
+  }
 }
 
 // ── Gemini API ───────────────────────────────────────
@@ -146,7 +207,11 @@ async function callGemini(systemPrompt, userText, jsonMode = false) {
   };
   if (jsonMode) body.generationConfig.responseMimeType = 'application/json';
 
-  const res = await fetch(GEMINI_URL, {
+  const url = window.GEMINI_KEY
+    ? `${GEMINI_DIRECT_URL}?key=${window.GEMINI_KEY}`
+    : PROXY_URL;
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -242,35 +307,31 @@ async function completeQuest(id) {
   const q = state.quests.find(q => q.id === id);
   if (!q || q.done) return;
   q.done = true;
-
-  const baseXp = XP_BY_DIFFICULTY[q.difficulty] || 0;
-  const { gained, levelsGained } = gainXp(baseXp);
   saveState();
   renderAll();
-  showToast(`퀘스트 완수 — XP +${gained}`);
 
-  // 드롭 굴림
-  const drop = rollDrop();
-  if (drop) {
-    try {
-      const item = await generateEquipment(drop.slot, drop.isUnique, q.fantasy);
-      state.character.inventory.unshift(item);
-      saveState();
-      renderAll();
-      showToast(`${drop.isUnique ? '✨ 유니크 ' : ''}장비 획득 — ${item.name}`);
-    } catch (e) {
-      showToast('보물 생성 실패: ' + e.message);
-    }
+  const drawn = drawReward(q.difficulty);
+  const { cast, candidates } = partitionDrawn(drawn);
+
+  // 즉시 시전 효과 적용
+  let castXp = 0;
+  for (const c of cast) {
+    if (CARD_DEFS[c].cast === 'xp1') castXp += 1;
   }
+  if (castXp > 0) gainXp(castXp);
+  saveState();
+  renderAll();
 
-  if (levelsGained > 0) {
-    showToast(`🎉 레벨 ${state.character.level} 달성! 분배 가능 +${STAT_POINTS_PER_LEVEL * levelsGained}`);
-    openStatModal();
+  if (candidates.length > 0) {
+    openCardPickModal(q.fantasy, candidates, cast);
+  } else {
+    if (cast.length > 0) showToast(`즉시 효과 ${cast.length}건 적용`);
+    else showToast('뽑은 카드가 없다');
+    if (state.character.pendingLevelUps > 0) openLevelupModal();
   }
 }
 
 function uncompleteQuest(id) {
-  // XP/드롭은 회수하지 않음 — 단순 표시 토글
   const q = state.quests.find(q => q.id === id);
   if (!q || !q.done) return;
   q.done = false;
@@ -313,28 +374,166 @@ function discardItem(itemId) {
   renderAll();
 }
 
-// ── Stat Distribution ────────────────────────────────
+// ── Card Pick Modal ──────────────────────────────────
 
-function openStatModal() {
-  if (state.character.pendingStatPoints <= 0) return;
-  document.getElementById('statModal').classList.remove('hidden');
-  renderStatModal();
+function openCardPickModal(questFantasy, candidates, cast) {
+  currentRewardCtx = { questFantasy, candidates, cast };
+  document.getElementById('cardPickModal').classList.remove('hidden');
+  renderCardPickModal();
 }
 
-function closeStatModal() {
-  document.getElementById('statModal').classList.add('hidden');
+function closeCardPickModal() {
+  document.getElementById('cardPickModal').classList.add('hidden');
+  currentRewardCtx = null;
 }
 
-function allocateStat(key) {
-  if (state.character.pendingStatPoints <= 0) return;
-  state.character.stats[key] += 1;
-  state.character.pendingStatPoints -= 1;
-  saveState();
-  renderStatModal();
-  renderCharacterPanel();
-  if (state.character.pendingStatPoints === 0) {
-    setTimeout(closeStatModal, 400);
+function renderCardPickModal() {
+  if (!currentRewardCtx) return;
+  const { candidates, cast } = currentRewardCtx;
+  const list = document.getElementById('cardPickList');
+  list.innerHTML = '';
+
+  if (cast.length > 0) {
+    const head = document.createElement('div');
+    head.className = 'card-section-heading';
+    head.textContent = '⚡ 즉시 발동';
+    list.appendChild(head);
+    for (const cardId of cast) {
+      list.appendChild(buildCardEl(cardId, false));
+    }
   }
+
+  const head2 = document.createElement('div');
+  head2.className = 'card-section-heading';
+  head2.textContent = `🎴 한 장 선택 (${candidates.length}장)`;
+  list.appendChild(head2);
+  for (const cardId of candidates) {
+    list.appendChild(buildCardEl(cardId, true));
+  }
+}
+
+function buildCardEl(cardId, clickable) {
+  const def = CARD_DEFS[cardId];
+  const el = document.createElement(clickable ? 'button' : 'div');
+  el.className = `card card-${cardId}` + (clickable ? ' candidate' : ' cast');
+  el.dataset.id = cardId;
+  el.innerHTML = `
+    <div class="card-label">${escapeHtml(def.label)}</div>
+    <div class="card-name">${escapeHtml(def.name)}</div>
+    ${def.desc ? `<div class="card-desc">${escapeHtml(def.desc)}</div>` : ''}
+  `;
+  return el;
+}
+
+async function pickRewardCard(cardId) {
+  if (!currentRewardCtx) return;
+  const ctx = currentRewardCtx;
+  closeCardPickModal();
+  await applyChosenCard(cardId, ctx.questFantasy);
+  saveState();
+  renderAll();
+  if (state.character.pendingLevelUps > 0) openLevelupModal();
+}
+
+// ── Levelup Modal ────────────────────────────────────
+
+function openLevelupModal() {
+  if (state.character.pendingLevelUps <= 0) return;
+  document.getElementById('levelupModal').classList.remove('hidden');
+  renderLevelupModal();
+}
+
+function closeLevelupModal() {
+  document.getElementById('levelupModal').classList.add('hidden');
+}
+
+function renderLevelupModal() {
+  document.getElementById('levelupRemaining').textContent = state.character.pendingLevelUps;
+}
+
+function pickLevelupOption(optionId) {
+  if (optionId === 'remove' || optionId === 'copy') {
+    closeLevelupModal();
+    openDeckSelectModal(optionId);
+    return;
+  }
+  if (optionId === 'add_draw_extra') {
+    state.character.deck.push('draw_extra');
+    showToast('덱에 "카드 +2 드로우" 추가');
+  } else if (optionId === 'add_xp_bonus') {
+    state.character.deck.push('xp_bonus');
+    showToast('덱에 "즉시 +1 XP" 추가');
+  }
+  finishLevelupChoice();
+}
+
+function finishLevelupChoice() {
+  state.character.pendingLevelUps -= 1;
+  saveState();
+  renderAll();
+  if (state.character.pendingLevelUps > 0) {
+    openLevelupModal();
+  } else {
+    closeLevelupModal();
+  }
+}
+
+// ── Deck Select Modal ────────────────────────────────
+
+function openDeckSelectModal(action) {
+  deckSelectAction = action;
+  document.getElementById('deckSelectModal').classList.remove('hidden');
+  renderDeckSelectModal();
+}
+
+function closeDeckSelectModal() {
+  document.getElementById('deckSelectModal').classList.add('hidden');
+  deckSelectAction = null;
+}
+
+function renderDeckSelectModal() {
+  document.getElementById('deckSelectTitle').textContent =
+    deckSelectAction === 'remove' ? '🗑 제거할 카드 선택' : '📑 복사할 카드 선택';
+
+  const counts = {};
+  for (const c of state.character.deck) counts[c] = (counts[c] || 0) + 1;
+
+  const order = ['xp1', 'xp2', 'xp3', 'item_normal', 'item_unique', 'curse', 'draw_extra', 'xp_bonus'];
+  const list = document.getElementById('deckSelectList');
+  list.innerHTML = '';
+  for (const cardId of order) {
+    if (!counts[cardId]) continue;
+    const def = CARD_DEFS[cardId];
+    const el = document.createElement('button');
+    el.className = `card card-${cardId} candidate`;
+    el.dataset.id = cardId;
+    el.innerHTML = `
+      <div class="card-label">${escapeHtml(def.label)}</div>
+      <div class="card-name">${escapeHtml(def.name)}</div>
+      <div class="card-count">×${counts[cardId]}</div>
+    `;
+    list.appendChild(el);
+  }
+}
+
+function pickDeckCard(cardId) {
+  const action = deckSelectAction;
+  const deck = state.character.deck;
+  if (action === 'remove') {
+    const idx = deck.indexOf(cardId);
+    if (idx >= 0) deck.splice(idx, 1);
+    showToast(`덱에서 제거: ${CARD_DEFS[cardId].name}`);
+  } else if (action === 'copy') {
+    deck.push(cardId);
+    showToast(`덱에 추가: ${CARD_DEFS[cardId].name}`);
+  }
+  closeDeckSelectModal();
+  finishLevelupChoice();
+}
+
+function cancelDeckSelect() {
+  closeDeckSelectModal();
+  openLevelupModal();
 }
 
 // ── Onboarding ───────────────────────────────────────
@@ -375,6 +574,7 @@ function renderAll() {
   renderEquipment();
   renderInventory();
   renderQuests();
+  renderDeckSummary();
 }
 
 function renderCharacterPanel() {
@@ -398,14 +598,13 @@ function renderCharacterPanel() {
   renderStat('int', '지능');
 
   const pending = document.getElementById('pendingPoints');
-  if (c.pendingStatPoints > 0) {
+  if (c.pendingLevelUps > 0) {
     pending.classList.remove('hidden');
-    pending.textContent = `분배 가능 +${c.pendingStatPoints}`;
+    pending.textContent = `레벨업 선택 +${c.pendingLevelUps}`;
   } else {
     pending.classList.add('hidden');
   }
 
-  // 퀘스트 슬롯
   document.getElementById('slotCount').textContent = `${c.questSlots.available} / ${MAX_QUEST_SLOTS}`;
   const next = document.getElementById('slotNext');
   if (c.questSlots.available >= MAX_QUEST_SLOTS) {
@@ -414,6 +613,18 @@ function renderCharacterPanel() {
     const remain = c.questSlots.lastRecoveredAt + slotCooldownMs() - Date.now();
     next.textContent = `다음 회복: ${formatDuration(Math.max(0, remain))}`;
   }
+}
+
+function renderDeckSummary() {
+  const root = document.getElementById('deckSummary');
+  if (!root) return;
+  const counts = {};
+  for (const c of state.character.deck) counts[c] = (counts[c] || 0) + 1;
+  const order = ['xp1', 'xp2', 'xp3', 'item_normal', 'item_unique', 'curse', 'draw_extra', 'xp_bonus'];
+  root.innerHTML = `<span class="deck-summary-total">총 ${state.character.deck.length}장</span>` +
+    order.filter(id => counts[id]).map(id =>
+      `<span class="deck-summary-chip" title="${escapeHtml(CARD_DEFS[id].name)}">${escapeHtml(CARD_DEFS[id].label)} ×${counts[id]}</span>`
+    ).join('');
 }
 
 function renderEquipment() {
@@ -493,13 +704,6 @@ function renderQuests() {
   }
 }
 
-function renderStatModal() {
-  document.getElementById('statModalRemaining').textContent = state.character.pendingStatPoints;
-  document.getElementById('statModalStr').textContent = state.character.stats.str;
-  document.getElementById('statModalLuk').textContent = state.character.stats.luk;
-  document.getElementById('statModalInt').textContent = state.character.stats.int;
-}
-
 // ── Helpers ──────────────────────────────────────────
 
 function formatStats(stats) {
@@ -548,19 +752,16 @@ function escapeHtml(str) {
 // ── Init ─────────────────────────────────────────────
 
 (function init() {
-  // 온보딩
   document.getElementById('jobSubmitBtn').addEventListener('click', submitOnboarding);
   document.getElementById('jobInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') submitOnboarding();
   });
 
-  // 퀘스트 등록
   document.getElementById('addBtn').addEventListener('click', addQuest);
   document.getElementById('todoInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') addQuest();
   });
 
-  // 퀘스트 목록 이벤트 위임
   const questList = document.getElementById('questList');
   questList.addEventListener('change', e => {
     const item = e.target.closest('.quest-item');
@@ -579,7 +780,6 @@ function escapeHtml(str) {
     }
   });
 
-  // 인벤토리 / 장비
   document.getElementById('inventoryList').addEventListener('click', e => {
     const id = Number(e.target.dataset.id);
     if (e.target.classList.contains('inv-equip')) equipItem(id);
@@ -589,14 +789,27 @@ function escapeHtml(str) {
     if (e.target.classList.contains('equip-unequip')) unequipSlot(e.target.dataset.slot);
   });
 
-  // 스탯 분배
-  document.getElementById('pendingPoints').addEventListener('click', openStatModal);
-  document.querySelectorAll('[data-alloc]').forEach(b => {
-    b.addEventListener('click', () => allocateStat(b.dataset.alloc));
+  // 카드 픽 모달
+  document.getElementById('cardPickList').addEventListener('click', e => {
+    const card = e.target.closest('.card.candidate');
+    if (!card) return;
+    pickRewardCard(card.dataset.id);
   });
-  document.getElementById('statModalClose').addEventListener('click', closeStatModal);
 
-  // 슬롯 회복 카운트다운: 매초 표시 갱신
+  // 레벨업 모달
+  document.getElementById('pendingPoints').addEventListener('click', openLevelupModal);
+  document.querySelectorAll('[data-levelup]').forEach(b => {
+    b.addEventListener('click', () => pickLevelupOption(b.dataset.levelup));
+  });
+
+  // 덱 선택 모달
+  document.getElementById('deckSelectList').addEventListener('click', e => {
+    const card = e.target.closest('.card.candidate');
+    if (!card) return;
+    pickDeckCard(card.dataset.id);
+  });
+  document.getElementById('deckSelectClose').addEventListener('click', cancelDeckSelect);
+
   setInterval(() => {
     if (!state.character.jobFantasy) return;
     recoverQuestSlots();

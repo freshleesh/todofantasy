@@ -59,6 +59,7 @@
           <span id="slotCount" class="slot-count">3 / 3</span>
           <span id="slotNext" class="slot-next">가득 참</span>
         </div>
+        <div id="deckSummary" class="deck-summary"></div>
       </section>
 
       <!-- 장비 슬롯 -->
@@ -98,50 +99,56 @@
     </footer>
   </div>
 
-  <!-- ── 스탯 분배 모달 ──────────────────────────────── -->
-  <div id="statModal" class="modal hidden">
+  <!-- ── 카드 픽 모달 ─────────────────────────────────── -->
+  <div id="cardPickModal" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-card">
-      <h2>⚜ 레벨 상승 — 스탯 분배</h2>
-      <p class="modal-hint">분배 가능 포인트: <b id="statModalRemaining">0</b></p>
-      <div class="stat-alloc-rows">
-        <div class="stat-alloc-row">
-          <div>
-            <div class="stat-alloc-label">힘 (STR)</div>
-            <div class="stat-alloc-desc">퀘스트 슬롯 회복 속도 — 1당 -5분</div>
-          </div>
-          <div class="stat-alloc-actions">
-            <span id="statModalStr" class="stat-alloc-value">0</span>
-            <button data-alloc="str">+1</button>
-          </div>
-        </div>
-        <div class="stat-alloc-row">
-          <div>
-            <div class="stat-alloc-label">운 (LUK)</div>
-            <div class="stat-alloc-desc">장비/유니크 드롭률 — 1당 +2%p / +1%p</div>
-          </div>
-          <div class="stat-alloc-actions">
-            <span id="statModalLuk" class="stat-alloc-value">0</span>
-            <button data-alloc="luk">+1</button>
-          </div>
-        </div>
-        <div class="stat-alloc-row">
-          <div>
-            <div class="stat-alloc-label">지능 (INT)</div>
-            <div class="stat-alloc-desc">경험치 획득량 — 1당 +5%</div>
-          </div>
-          <div class="stat-alloc-actions">
-            <span id="statModalInt" class="stat-alloc-value">0</span>
-            <button data-alloc="int">+1</button>
-          </div>
-        </div>
+      <h2>🎴 보상 카드</h2>
+      <p class="modal-hint" id="cardPickHint">한 장을 선택하시오</p>
+      <div id="cardPickList" class="card-list"></div>
+    </div>
+  </div>
+
+  <!-- ── 레벨업 선택 모달 ────────────────────────────── -->
+  <div id="levelupModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h2>⚜ 레벨 상승</h2>
+      <p class="modal-hint">남은 선택: <b id="levelupRemaining">0</b></p>
+      <div class="levelup-options">
+        <button class="levelup-option" data-levelup="remove">
+          <div class="levelup-option-name">🗑 카드 제거</div>
+          <div class="levelup-option-desc">덱에서 카드 1장을 영구 제거</div>
+        </button>
+        <button class="levelup-option" data-levelup="copy">
+          <div class="levelup-option-name">📑 카드 복사</div>
+          <div class="levelup-option-desc">덱의 카드 1장을 복사하여 추가</div>
+        </button>
+        <button class="levelup-option" data-levelup="add_draw_extra">
+          <div class="levelup-option-name">🎴 + 카드 +2 드로우</div>
+          <div class="levelup-option-desc">"뽑을 시 시전: 카드 2장 더 뽑기" 카드를 덱에 추가</div>
+        </button>
+        <button class="levelup-option" data-levelup="add_xp_bonus">
+          <div class="levelup-option-name">⚡ + 즉시 +1 XP</div>
+          <div class="levelup-option-desc">"뽑을 시 시전: 경험치 +1" 카드를 덱에 추가</div>
+        </button>
       </div>
-      <button id="statModalClose" class="modal-close">닫기</button>
+    </div>
+  </div>
+
+  <!-- ── 덱 선택 모달 (제거/복사) ────────────────────── -->
+  <div id="deckSelectModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h2 id="deckSelectTitle">카드 선택</h2>
+      <div id="deckSelectList" class="deck-card-list"></div>
+      <button id="deckSelectClose" class="modal-close">취소</button>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="local-config.js" onerror="this.remove()"></script>
   <script src="prompts.js"></script>
   <script src="app.js"></script>
 </body>

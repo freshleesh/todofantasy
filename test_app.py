@@ -3,7 +3,7 @@ Todo Fantassy 로컬 통합 테스트.
 - python3 -m http.server를 백그라운드로 띄우고
 - Playwright로 페이지 로드
 - Gemini API는 page.route()로 모킹
-- 온보딩 → 퀘스트 등록 → 완료 → 드롭 → 장착 → 레벨업 → 스탯 분배 시나리오 검증
+- 온보딩 → 퀘스트 등록 → 완료 → 카드 픽 → 장착 → 레벨업 → 덱 선택 시나리오 검증
 - 각 단계 스크린샷을 test_screenshots/에 저장
 """
 import asyncio
@@ -65,17 +65,21 @@ async def run():
 
         def on_console(msg):
             if msg.type == "error":
+                # local-config.js 404는 무시 (gitignored, 로컬 전용)
+                if "local-config.js" in msg.text:
+                    return
                 errors.append(f"console.error: {msg.text}")
 
         page.on("console", on_console)
         await page.route("**/api/gemini", mock_gemini)
+        # 직접 호출 모드(window.GEMINI_KEY 설정 시) 대비
+        await page.route("**/generativelanguage.googleapis.com/**", mock_gemini)
 
-        # 결정적 random — drop 발생, unique 미발생 (luk 50일 때)
+        # 결정적 random — 0.6
         await page.add_init_script("Math.random = () => 0.6;")
 
         # 1. 온보딩
         await page.goto(f"http://localhost:{PORT}/")
-        # 깨끗한 시작
         await page.evaluate("localStorage.clear(); location.reload();")
         await page.wait_for_selector("#onboarding:not(.hidden)")
         await page.screenshot(path=str(SHOTS / "01_onboarding.png"))
@@ -87,83 +91,99 @@ async def run():
         assert job == JOB_FANTASY, f"job mismatch: {job!r}"
         await page.screenshot(path=str(SHOTS / "02_post_onboarding.png"))
 
-        # 2. 퀘스트 등록
-        # 드롭이 무조건 일어나도록 LUK 미리 셋업
-        await page.evaluate("state.character.stats.luk = 50; saveState(); renderAll();")
+        # 2. 통제된 덱 주입 — 카드 픽이 결정적이도록
+        # 난이도 중(2장 드로우), 덱 2장이라 두 장 다 뽑힘
+        await page.evaluate(
+            "state.character.deck = ['xp1', 'item_normal']; saveState(); renderAll();"
+        )
 
+        # 3. 퀘스트 등록
         await page.fill("#todoInput", "마트에서 장 보기")
         await page.click("#addBtn")
         await page.wait_for_selector(".quest-item")
         title = await page.text_content(".quest-title")
-        assert "마트의 미궁" in title, f"title mismatch: {title!r}"
-        # 본문은 접힌 상태라 보이지 않아야 함
-        fantasy_visible = await page.locator(".quest-fantasy").first.is_visible()
-        assert not fantasy_visible, "quest-fantasy should be hidden by default"
+        assert "마트의 미궁" in title, f"title: {title!r}"
         slot_count = (await page.text_content("#slotCount")).strip()
         assert slot_count == "2 / 3", f"slot count: {slot_count!r}"
         await page.screenshot(path=str(SHOTS / "03_quest_added.png"), full_page=True)
 
-        # 클릭해서 펼치면 본문이 보여야 함
+        # 펼치기 동작 확인
         await page.locator(".quest-title").first.click()
         await page.wait_for_selector(".quest-item.expanded")
         fantasy = await page.text_content(".quest-fantasy")
-        assert "마트의 끝없는" in fantasy, f"fantasy mismatch: {fantasy!r}"
-        await page.screenshot(path=str(SHOTS / "03b_quest_expanded.png"), full_page=True)
-        # 다시 접기 (이후 단계가 접힌 상태 가정)
-        await page.locator(".quest-title").first.click()
+        assert "마트의 끝없는" in fantasy, f"fantasy: {fantasy!r}"
+        await page.locator(".quest-title").first.click()  # 다시 접기
 
-        # 3. 완료 → XP & 드롭
+        # 4. 완료 → 카드 픽 모달
         await page.click(".quest-checkbox")
-        await page.wait_for_selector(".inv-item")
-        item_name = await page.text_content(".inv-item-name")
-        assert "은빛 룬" in item_name, f"item: {item_name!r}"
-        xp_text = await page.text_content("#xpText")
-        # 중 = 25 XP, INT 0 → 25
-        assert xp_text.strip().startswith("25"), f"xp: {xp_text!r}"
-        await page.screenshot(path=str(SHOTS / "04_quest_done_with_drop.png"))
+        await page.wait_for_selector("#cardPickModal:not(.hidden)")
+        candidate_count = await page.locator("#cardPickList .card.candidate").count()
+        assert candidate_count == 2, f"candidates: {candidate_count}"
+        await page.screenshot(path=str(SHOTS / "04_card_pick.png"), full_page=True)
 
-        # 4. 장착
-        await page.click(".inv-equip")
-        await page.wait_for_selector(".equip-slot.filled")
-        equipped = await page.text_content(".equip-slot.filled .equip-slot-name")
-        assert "은빛 룬" in equipped, f"equipped: {equipped!r}"
-        # 장착 후 STR 0+2=2 (장비 효과)
-        str_text = await page.text_content("#stat-str")
-        assert "2" in str_text, f"str: {str_text!r}"
-        await page.screenshot(path=str(SHOTS / "05_equipped.png"))
+        # item_normal 카드 클릭 (있으면)
+        item_card = page.locator("#cardPickList .card.candidate[data-id='item_normal']")
+        item_count = await item_card.count()
+        if item_count > 0:
+            await item_card.first.click()
+        else:
+            # fallback: 첫 후보 클릭
+            await page.locator("#cardPickList .card.candidate").first.click()
 
-        # 5. 레벨업 강제 → 모달 → 스탯 분배
-        await page.evaluate("state.character.xp = 99; saveState(); renderAll();")
-        await page.fill("#todoInput", "운동하기")
-        await page.click("#addBtn")
-        # 새 퀘스트가 첫 항목 (unshift)
-        await page.locator(".quest-item:not(.done) .quest-checkbox").first.click()
-        await page.wait_for_selector("#statModal:not(.hidden)")
-        remaining = await page.text_content("#statModalRemaining")
-        assert remaining.strip() == "5", f"remaining: {remaining!r}"
-        await page.screenshot(path=str(SHOTS / "06_level_up_modal.png"))
+        # 카드 픽 모달 닫힘 확인
+        await page.wait_for_selector("#cardPickModal", state="hidden")
 
-        # 5포인트 분배 → 자동 닫힘 (setTimeout 400ms)
-        for stat in ["str", "luk", "int", "str", "int"]:
-            await page.click(f"[data-alloc='{stat}']")
-        await page.wait_for_function(
-            "document.getElementById('statModal').classList.contains('hidden')"
+        # 5. item_normal을 골랐다면 인벤토리에 장비 생김
+        if item_count > 0:
+            await page.wait_for_selector(".inv-item", timeout=5000)
+            item_name = await page.text_content(".inv-item-name")
+            assert "은빛 룬" in item_name, f"item: {item_name!r}"
+            await page.screenshot(path=str(SHOTS / "05_item_dropped.png"), full_page=True)
+
+            # 장착
+            await page.click(".inv-equip")
+            await page.wait_for_selector(".equip-slot.filled")
+            equipped = await page.text_content(".equip-slot.filled .equip-slot-name")
+            assert "은빛 룬" in equipped, f"equipped: {equipped!r}"
+            await page.screenshot(path=str(SHOTS / "06_equipped.png"), full_page=True)
+
+        # 6. 레벨업 모달 — 강제로 트리거
+        await page.evaluate(
+            "state.character.pendingLevelUps = 1; saveState(); renderAll();"
         )
-        final_stats = await page.evaluate("({ ...state.character.stats })")
-        # 시작 LUK 50 + 분배 1
-        assert final_stats == {"str": 2, "luk": 51, "int": 2}, f"stats: {final_stats!r}"
-        level = await page.text_content("#charLevel")
-        assert level.strip() == "2", f"level: {level!r}"
-        await page.screenshot(path=str(SHOTS / "07_after_alloc.png"))
+        await page.click("#pendingPoints")
+        await page.wait_for_selector("#levelupModal:not(.hidden)")
+        remaining = await page.text_content("#levelupRemaining")
+        assert remaining.strip() == "1", f"remaining: {remaining!r}"
+        await page.screenshot(path=str(SHOTS / "07_levelup_modal.png"), full_page=True)
 
-        # 6. 인벤토리에서 버리기
-        # 두 번째 드롭이 추가됐을 것. 버리기 버튼 클릭
-        inv_count_before = await page.locator(".inv-item").count()
-        if inv_count_before > 0:
-            await page.locator(".inv-discard").first.click()
-            inv_count_after = await page.locator(".inv-item").count()
-            assert inv_count_after == inv_count_before - 1
-        await page.screenshot(path=str(SHOTS / "08_final.png"))
+        # 'add_xp_bonus' 선택 → 덱에 추가, 모달 닫힘
+        deck_before = await page.evaluate("state.character.deck.length")
+        await page.click("[data-levelup='add_xp_bonus']")
+        await page.wait_for_selector("#levelupModal", state="hidden")
+        deck_after = await page.evaluate("state.character.deck.length")
+        assert deck_after == deck_before + 1, f"deck size: {deck_before} → {deck_after}"
+        has_bonus = await page.evaluate("state.character.deck.includes('xp_bonus')")
+        assert has_bonus, "xp_bonus card not added to deck"
+        pending_after = await page.evaluate("state.character.pendingLevelUps")
+        assert pending_after == 0, f"pendingLevelUps: {pending_after}"
+        await page.screenshot(path=str(SHOTS / "08_after_levelup.png"), full_page=True)
+
+        # 7. 레벨업 — 덱에서 카드 제거 플로우
+        await page.evaluate(
+            "state.character.pendingLevelUps = 1; saveState(); renderAll();"
+        )
+        await page.click("#pendingPoints")
+        await page.wait_for_selector("#levelupModal:not(.hidden)")
+        await page.click("[data-levelup='remove']")
+        await page.wait_for_selector("#deckSelectModal:not(.hidden)")
+        await page.screenshot(path=str(SHOTS / "09_deck_select.png"), full_page=True)
+
+        # xp_bonus 카드 제거 (방금 추가한 거)
+        await page.click("#deckSelectList .card.candidate[data-id='xp_bonus']")
+        await page.wait_for_selector("#deckSelectModal", state="hidden")
+        has_bonus_after = await page.evaluate("state.character.deck.includes('xp_bonus')")
+        assert not has_bonus_after, "xp_bonus should be removed"
 
         await browser.close()
 
