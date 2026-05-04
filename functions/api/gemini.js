@@ -57,12 +57,32 @@ export async function onRequestPost(context) {
     });
   }
 
+  // 모델은 본문 'model' 필드로 결정 (생략 시 텍스트 모델). 화이트리스트만 통과.
+  const ALLOWED = new Set(['gemini-2.5-flash', 'gemini-2.5-flash-image']);
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const model = body.model || 'gemini-2.5-flash';
+  if (!ALLOWED.has(model)) {
+    return new Response(JSON.stringify({ error: `model not allowed: ${model}` }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  delete body.model; // upstream에는 보내지 않음
+
   const upstream = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: await request.text(),
+      body: JSON.stringify(body),
     },
   );
 
