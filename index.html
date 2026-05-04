@@ -16,29 +16,128 @@
       <p class="subtitle">— 그대의 사소한 임무를 위대한 퀘스트로 —</p>
     </header>
 
-
-
-    <section class="quest-input-section">
-      <label for="todoInput">📜 오늘의 임무를 고하라</label>
-      <div class="input-row">
-        <input type="text" id="todoInput" placeholder="예: 마트에서 장 보기" maxlength="200" />
-        <button id="addBtn">
-          <span id="addBtnText">퀘스트 등록</span>
-          <span id="addBtnSpinner" class="spinner hidden"></span>
-        </button>
+    <!-- ── 온보딩: 직업 입력 ─────────────────────────── -->
+    <section id="onboarding" class="hidden">
+      <div class="onboarding-card">
+        <h2>🜲 그대의 정체를 밝히라</h2>
+        <p class="onboarding-hint">
+          현세에서의 그대의 직업을 적으시오. 운명이 그대에게 어울리는 판타지의 직업을 점지하리라.
+        </p>
+        <div class="input-row">
+          <input type="text" id="jobInput" placeholder="예: 로봇공학자, 학생, 카페 직원…" maxlength="60" />
+          <button id="jobSubmitBtn">
+            <span class="btn-text">운명을 받아들이다</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
       </div>
     </section>
 
-    <section class="quest-list-section">
-      <h2>📖 퀘스트 일람</h2>
-      <div id="questList" class="quest-list">
-        <p class="empty-state" id="emptyState">아직 등록된 퀘스트가 없습니다.<br/>그대의 첫 번째 임무를 고하십시오.</p>
-      </div>
-    </section>
+    <!-- ── 게임 본문 ─────────────────────────────────── -->
+    <div id="game" class="hidden">
+
+      <!-- 캐릭터 패널 -->
+      <section class="character-panel">
+        <div class="char-header">
+          <div class="char-job-line">
+            <span class="char-level">Lv.<span id="charLevel">1</span></span>
+            <span class="char-job" id="charJob">—</span>
+          </div>
+          <button id="pendingPoints" class="pending-points hidden"></button>
+        </div>
+        <div class="xp-bar">
+          <div class="xp-fill" id="xpFill"></div>
+          <div class="xp-text" id="xpText">0 / 100</div>
+        </div>
+        <div class="char-stats">
+          <span id="stat-str" class="stat-pill">힘 <b>0</b></span>
+          <span id="stat-luk" class="stat-pill">운 <b>0</b></span>
+          <span id="stat-int" class="stat-pill">지능 <b>0</b></span>
+        </div>
+        <div class="quest-slots-line">
+          <span>퀘스트 슬롯</span>
+          <span id="slotCount" class="slot-count">3 / 3</span>
+          <span id="slotNext" class="slot-next">가득 참</span>
+        </div>
+      </section>
+
+      <!-- 장비 슬롯 -->
+      <section class="equipment-section">
+        <h2>🛡 장착</h2>
+        <div id="equipmentSlots" class="equipment-grid"></div>
+      </section>
+
+      <!-- 인벤토리 -->
+      <section class="inventory-section">
+        <h2>🎒 보관함</h2>
+        <div id="inventoryList" class="inventory-list"></div>
+      </section>
+
+      <!-- 퀘스트 입력 -->
+      <section class="quest-input-section">
+        <label for="todoInput">📜 오늘의 임무를 고하라</label>
+        <div class="input-row">
+          <input type="text" id="todoInput" placeholder="예: 마트에서 장 보기" maxlength="200" />
+          <button id="addBtn">
+            <span class="btn-text">퀘스트 등록</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 퀘스트 목록 -->
+      <section class="quest-list-section">
+        <h2>📖 퀘스트 일람</h2>
+        <div id="questList" class="quest-list"></div>
+      </section>
+
+    </div>
 
     <footer>
       <p>Powered by <a href="https://deepmind.google/gemini" target="_blank">Google Gemini</a></p>
     </footer>
+  </div>
+
+  <!-- ── 스탯 분배 모달 ──────────────────────────────── -->
+  <div id="statModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h2>⚜ 레벨 상승 — 스탯 분배</h2>
+      <p class="modal-hint">분배 가능 포인트: <b id="statModalRemaining">0</b></p>
+      <div class="stat-alloc-rows">
+        <div class="stat-alloc-row">
+          <div>
+            <div class="stat-alloc-label">힘 (STR)</div>
+            <div class="stat-alloc-desc">퀘스트 슬롯 회복 속도 — 1당 -5분</div>
+          </div>
+          <div class="stat-alloc-actions">
+            <span id="statModalStr" class="stat-alloc-value">0</span>
+            <button data-alloc="str">+1</button>
+          </div>
+        </div>
+        <div class="stat-alloc-row">
+          <div>
+            <div class="stat-alloc-label">운 (LUK)</div>
+            <div class="stat-alloc-desc">장비/유니크 드롭률 — 1당 +2%p / +1%p</div>
+          </div>
+          <div class="stat-alloc-actions">
+            <span id="statModalLuk" class="stat-alloc-value">0</span>
+            <button data-alloc="luk">+1</button>
+          </div>
+        </div>
+        <div class="stat-alloc-row">
+          <div>
+            <div class="stat-alloc-label">지능 (INT)</div>
+            <div class="stat-alloc-desc">경험치 획득량 — 1당 +5%</div>
+          </div>
+          <div class="stat-alloc-actions">
+            <span id="statModalInt" class="stat-alloc-value">0</span>
+            <button data-alloc="int">+1</button>
+          </div>
+        </div>
+      </div>
+      <button id="statModalClose" class="modal-close">닫기</button>
+    </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
