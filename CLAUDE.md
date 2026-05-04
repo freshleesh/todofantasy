@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working agreement
+
+**결정 사항을 나열했으면, 사용자가 답하기 전까지는 구현을 시작하지 않는다.** A~G 같은 항목별 질문을 던졌다면 그건 정보가 아니라 blocking checkpoint다. 동일 메시지 재전송이나 짧은 동의("ㅇㅇ", "ㄱ" 등)는 묵시적 합의로 해석하지 말 것 — 모호함 신호로 보고 한 줄 재확인. 부득이 추천안대로 진행해야 하면 응답 첫 줄에 "확인 못 받았으니 추천안대로 진행, 다르면 멈춰주세요"를 명시.
+
 ## Project
 
 Todo Fantassy — a single-page Korean-language RPG-themed todo app. The user inputs mundane tasks; Gemini rewrites them as medieval-fantasy quests **and assigns a difficulty (상/중/하)**. Completing quests grants XP, levels, and probabilistic equipment drops (also AI-generated). UI copy and prompts are in Korean — preserve that when editing user-visible strings.

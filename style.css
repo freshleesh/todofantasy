@@ -242,10 +242,11 @@ button:disabled {
 
 .quest-fantasy {
   font-size: 0.92rem;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--ink);
   margin-top: 0.4rem;
   display: none;
+  white-space: pre-line;
 }
 
 .quest-original {
@@ -331,6 +332,25 @@ footer {
 
 footer a { color: var(--gold); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
+
+.reset-btn {
+  display: inline-block;
+  background: none;
+  border: 1px solid var(--ink-light);
+  color: var(--ink-light);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-style: normal;
+  padding: 0.15rem 0.5rem;
+  margin-top: 0.5rem;
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.reset-btn:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--red);
+  border-color: var(--red);
+}
 
 /* ── Onboarding ───────────────────────────────────── */
 .onboarding-card {

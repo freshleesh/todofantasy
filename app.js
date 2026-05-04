@@ -15,6 +15,10 @@ const MAX_QUEST_SLOTS = 3;
 
 const INT_XP_BONUS = 0.05;
 
+const LUK_CRIT_BASE = 0.05;
+const LUK_CRIT_PER = 0.02;
+const LUK_CRIT_MAX = 0.80;
+
 // ── Card / Deck ──────────────────────────────────────
 
 const CARD_DEFS = {
@@ -137,6 +141,12 @@ function consumeQuestSlot() {
   return true;
 }
 
+function rollCrit() {
+  const { luk } = totalStats();
+  const chance = Math.min(LUK_CRIT_MAX, LUK_CRIT_BASE + luk * LUK_CRIT_PER);
+  return Math.random() < chance;
+}
+
 function gainXp(baseXp) {
   const { int } = totalStats();
   const gained = Math.round(baseXp * (1 + int * INT_XP_BONUS));
@@ -176,21 +186,24 @@ function partitionDrawn(drawn) {
   return { cast, candidates };
 }
 
-async function applyChosenCard(cardId, questFantasy) {
+async function applyChosenCard(cardId, questFantasy, crit) {
   const def = CARD_DEFS[cardId];
   const eff = def.effect || {};
+  const mult = crit ? 2 : 1;
   if (eff.xp) {
-    const gained = gainXp(eff.xp);
-    showToast(`경험치 +${gained}`);
+    const gained = gainXp(eff.xp * mult);
+    showToast(`경험치 +${gained}${crit ? ' (치명타!)' : ''}`);
   } else if (eff.drop) {
     const isUnique = eff.drop === 'unique';
-    const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
-    try {
-      const item = await generateEquipment(slot, isUnique, questFantasy);
-      state.character.inventory.unshift(item);
-      showToast(`${isUnique ? '✨ 유니크 ' : ''}장비 획득 — ${item.name}`);
-    } catch (e) {
-      showToast('보물 생성 실패: ' + e.message);
+    for (let i = 0; i < mult; i++) {
+      const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
+      try {
+        const item = await generateEquipment(slot, isUnique, questFantasy);
+        state.character.inventory.unshift(item);
+        showToast(`${isUnique ? '✨ 유니크 ' : ''}장비 획득 — ${item.name}`);
+      } catch (e) {
+        showToast('보물 생성 실패: ' + e.message);
+      }
     }
   } else {
     showToast('💀 저주 — 보상이 없다');
@@ -203,7 +216,10 @@ async function callGemini(systemPrompt, userText, jsonMode = false) {
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: 'user', parts: [{ text: userText }] }],
-    generationConfig: { maxOutputTokens: 400 },
+    generationConfig: {
+      maxOutputTokens: 1500,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   };
   if (jsonMode) body.generationConfig.responseMimeType = 'application/json';
 
@@ -310,20 +326,23 @@ async function completeQuest(id) {
   saveState();
   renderAll();
 
+  const crit = rollCrit();
+  if (crit) showToast('🎯 치명타! 이번 보상 ×2');
+
   const drawn = drawReward(q.difficulty);
   const { cast, candidates } = partitionDrawn(drawn);
 
-  // 즉시 시전 효과 적용
+  // 즉시 시전 효과 적용 (크리 시 ×2)
   let castXp = 0;
   for (const c of cast) {
     if (CARD_DEFS[c].cast === 'xp1') castXp += 1;
   }
-  if (castXp > 0) gainXp(castXp);
+  if (castXp > 0) gainXp(castXp * (crit ? 2 : 1));
   saveState();
   renderAll();
 
   if (candidates.length > 0) {
-    openCardPickModal(q.fantasy, candidates, cast);
+    openCardPickModal(q.fantasy, candidates, cast, crit);
   } else {
     if (cast.length > 0) showToast(`즉시 효과 ${cast.length}건 적용`);
     else showToast('뽑은 카드가 없다');
@@ -376,8 +395,8 @@ function discardItem(itemId) {
 
 // ── Card Pick Modal ──────────────────────────────────
 
-function openCardPickModal(questFantasy, candidates, cast) {
-  currentRewardCtx = { questFantasy, candidates, cast };
+function openCardPickModal(questFantasy, candidates, cast, crit) {
+  currentRewardCtx = { questFantasy, candidates, cast, crit };
   document.getElementById('cardPickModal').classList.remove('hidden');
   renderCardPickModal();
 }
@@ -389,14 +408,16 @@ function closeCardPickModal() {
 
 function renderCardPickModal() {
   if (!currentRewardCtx) return;
-  const { candidates, cast } = currentRewardCtx;
+  const { candidates, cast, crit } = currentRewardCtx;
+  document.getElementById('cardPickHint').innerHTML =
+    (crit ? '🎯 <b>치명타!</b> 이번 보상 ×2 — ' : '') + '한 장을 선택하시오';
   const list = document.getElementById('cardPickList');
   list.innerHTML = '';
 
   if (cast.length > 0) {
     const head = document.createElement('div');
     head.className = 'card-section-heading';
-    head.textContent = '⚡ 즉시 발동';
+    head.textContent = '⚡ 즉시 발동' + (crit ? ' (×2)' : '');
     list.appendChild(head);
     for (const cardId of cast) {
       list.appendChild(buildCardEl(cardId, false));
@@ -405,7 +426,7 @@ function renderCardPickModal() {
 
   const head2 = document.createElement('div');
   head2.className = 'card-section-heading';
-  head2.textContent = `🎴 한 장 선택 (${candidates.length}장)`;
+  head2.textContent = `🎴 한 장 선택 (${candidates.length}장)` + (crit ? ' — ×2 적용' : '');
   list.appendChild(head2);
   for (const cardId of candidates) {
     list.appendChild(buildCardEl(cardId, true));
@@ -429,7 +450,7 @@ async function pickRewardCard(cardId) {
   if (!currentRewardCtx) return;
   const ctx = currentRewardCtx;
   closeCardPickModal();
-  await applyChosenCard(cardId, ctx.questFantasy);
+  await applyChosenCard(cardId, ctx.questFantasy, ctx.crit);
   saveState();
   renderAll();
   if (state.character.pendingLevelUps > 0) openLevelupModal();
@@ -809,6 +830,13 @@ function escapeHtml(str) {
     pickDeckCard(card.dataset.id);
   });
   document.getElementById('deckSelectClose').addEventListener('click', cancelDeckSelect);
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (confirm('모든 데이터를 초기화하고 처음부터 시작합니다. 진행하시겠습니까?')) {
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+    }
+  });
 
   setInterval(() => {
     if (!state.character.jobFantasy) return;
