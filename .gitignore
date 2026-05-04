@@ -5,3 +5,9 @@ node_modules/
 local-config.js
 __pycache__/
 *.pyc
+
+# 카드 일러스트 원본(generate-card-art.mjs로 재생성, process-card-art.py가 webp로 가공해 commit)
+asset/cards/*.png
+
+# 통합 테스트 산출물 — git 추적 해제
+test_screenshots/

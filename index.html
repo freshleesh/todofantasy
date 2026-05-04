@@ -19,7 +19,7 @@
     <!-- ── 온보딩: 직업 입력 ─────────────────────────── -->
     <section id="onboarding" class="hidden">
       <div class="onboarding-card">
-        <h2>🜲 그대의 정체를 밝히라</h2>
+        <h2>⚜ 그대의 정체를 밝히라</h2>
         <p class="onboarding-hint">
           현세에서의 그대의 직업을 적으시오. 운명이 그대에게 어울리는 판타지의 직업을 점지하리라.
         </p>
@@ -33,8 +33,38 @@
       </div>
     </section>
 
+    <!-- ── 직업 인트로 ───────────────────────────────── -->
+    <section id="jobIntro" class="hidden">
+      <div class="intro-card">
+        <p class="intro-prelude">— 운명이 그대를 부른다 —</p>
+        <h2 class="intro-job-name" id="introJobName"></h2>
+        <div class="intro-text" id="introText"></div>
+        <button id="introStartBtn">
+          <span class="btn-text">여정을 시작하다</span>
+        </button>
+      </div>
+    </section>
+
     <!-- ── 게임 본문 ─────────────────────────────────── -->
     <div id="game" class="hidden">
+
+      <!-- 퀘스트 입력 -->
+      <section class="quest-input-section">
+        <label for="todoInput">📜 오늘의 임무를 고하라</label>
+        <div class="input-row">
+          <input type="text" id="todoInput" placeholder="예: 마트에서 장 보기" maxlength="200" />
+          <button id="addBtn">
+            <span class="btn-text">퀘스트 등록</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 퀘스트 목록 -->
+      <section class="quest-list-section">
+        <h2>📖 퀘스트 일람</h2>
+        <div id="questList" class="quest-list"></div>
+      </section>
 
       <!-- 캐릭터 패널 -->
       <section class="character-panel">
@@ -59,7 +89,18 @@
           <span id="slotCount" class="slot-count">3 / 3</span>
           <span id="slotNext" class="slot-next">가득 참</span>
         </div>
-        <div id="deckSummary" class="deck-summary"></div>
+        <button type="button" id="deckViewBtn" class="deck-view-btn">
+          🎴 내 보상덱
+          <span id="deckViewCount" class="deck-view-count">0장</span>
+        </button>
+        <div id="reputationBlock" class="reputation-block collapsed">
+          <button type="button" id="reputationToggle" class="reputation-toggle">
+            <span class="reputation-title">⚜ 그대의 평판</span>
+            <span id="reputationStatus" class="reputation-status"></span>
+            <span class="reputation-chevron">▾</span>
+          </button>
+          <div id="reputationBody" class="reputation-body"></div>
+        </div>
       </section>
 
       <!-- 장비 슬롯 -->
@@ -74,30 +115,34 @@
         <div id="inventoryList" class="inventory-list"></div>
       </section>
 
-      <!-- 퀘스트 입력 -->
-      <section class="quest-input-section">
-        <label for="todoInput">📜 오늘의 임무를 고하라</label>
-        <div class="input-row">
-          <input type="text" id="todoInput" placeholder="예: 마트에서 장 보기" maxlength="200" />
-          <button id="addBtn">
-            <span class="btn-text">퀘스트 등록</span>
-            <span class="spinner hidden"></span>
-          </button>
-        </div>
-      </section>
-
-      <!-- 퀘스트 목록 -->
-      <section class="quest-list-section">
-        <h2>📖 퀘스트 일람</h2>
-        <div id="questList" class="quest-list"></div>
-      </section>
-
     </div>
 
     <footer>
       <p>Powered by <a href="https://deepmind.google/gemini" target="_blank">Google Gemini</a></p>
       <button id="resetBtn" class="reset-btn" title="localStorage 초기화 후 새로고침">데이터 리셋</button>
     </footer>
+  </div>
+
+  <!-- ── 보상덱 보기 모달 ──────────────────────────────── -->
+  <div id="deckViewModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card deck-view-modal-card">
+      <h2>🎴 보상덱</h2>
+      <p class="modal-hint" id="deckViewHint">총 0장</p>
+      <div id="deckViewList" class="deck-view-list"></div>
+      <button id="deckViewCloseBtn" class="modal-close">닫기</button>
+    </div>
+  </div>
+
+  <!-- ── 완수담 모달 ──────────────────────────────────── -->
+  <div id="completionModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h2>📜 완수의 기록</h2>
+      <p class="modal-hint" id="completionQuestTitle"></p>
+      <div id="completionText" class="completion-text"></div>
+      <button id="completionCloseBtn" class="modal-close">닫기</button>
+    </div>
   </div>
 
   <!-- ── 카드 픽 모달 ─────────────────────────────────── -->
@@ -130,8 +175,8 @@
           <div class="levelup-option-desc">"뽑을 시 시전: 카드 2장 더 뽑기" 카드를 덱에 추가</div>
         </button>
         <button class="levelup-option" data-levelup="add_xp_bonus">
-          <div class="levelup-option-name">⚡ + 즉시 +1 XP</div>
-          <div class="levelup-option-desc">"뽑을 시 시전: 경험치 +1" 카드를 덱에 추가</div>
+          <div class="levelup-option-name">⚡ + 즉시 +100 XP</div>
+          <div class="levelup-option-desc">"뽑을 시 시전: 경험치 +100" 카드를 덱에 추가</div>
         </button>
       </div>
     </div>
