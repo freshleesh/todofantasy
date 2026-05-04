@@ -11,7 +11,7 @@ const xpToNext = (level) => level * 100;
 const BASE_SLOT_COOLDOWN_MS = 120 * 60 * 1000;
 const STR_COOLDOWN_REDUCTION_MS = 5 * 60 * 1000;
 const MIN_SLOT_COOLDOWN_MS = 20 * 60 * 1000;
-const MAX_QUEST_SLOTS = 3;
+const MAX_QUEST_SLOTS = 99;
 
 const INT_XP_BONUS = 0.05;
 

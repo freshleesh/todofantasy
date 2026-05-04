@@ -153,7 +153,7 @@ async def run():
         title = await page.text_content(".quest-title")
         assert "마트의 미궁" in title, f"title: {title!r}"
         slot_count = (await page.text_content("#slotCount")).strip()
-        assert slot_count == "2 / 3", f"slot count: {slot_count!r}"
+        assert slot_count == "98 / 99", f"slot count: {slot_count!r}"
         await page.screenshot(path=str(SHOTS / "03_quest_added.png"), full_page=True)
 
         # 펼치기 동작 확인
