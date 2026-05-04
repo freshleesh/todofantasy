@@ -19,9 +19,20 @@ SHOTS = ROOT / "test_screenshots"
 
 # ── Mock 응답 ──────────────────────────────────────────
 JOB_FANTASY = "고대 골렘술사"
+JOB_INTRO = (
+    "당신은 고대 골렘술사이다. 흙과 룬을 엮어 거인을 빚어내는 자.\n\n"
+    "이 세계는 황혼의 시대에 놓였다. 무너진 탑들 사이로 빛이 깜박인다.\n\n"
+    "그대는 작은 마을의 작업장에 머문다. 오늘의 사소한 행보가 곧 위대한 한 걸음이다."
+)
+REPUTATION_NEW = (
+    "당신은 마을 사람들 사이에서 묵묵한 골렘술사로 통한다.\n\n"
+    "황혼의 시대는 여전히 흐르며, 동쪽 산맥의 그림자가 짙어지고 있다.\n\n"
+    "방금 그대는 마트의 미궁에서 양식을 구해 돌아왔다. 작은 발걸음이지만 굳건하다."
+)
+COMPLETION_NARRATIVE = "그대는 마트의 진열대를 헤매다 마침내 식재료를 가방에 담아 무사히 귀환하였다."
 QUEST_JSON = {
     "title": "마트의 미궁",
-    "fantasy": "마트의 끝없는 미궁에서 일용할 양식을 구하는 위대한 여정에 나서라.",
+    "fantasy": "그대는 마트라 불리는 진열대의 미궁에 들어, 식탁에 오를 식재료를 골라 가방에 담아야 한다.",
     "difficulty": "중",
 }
 EQUIP_JSON = {
@@ -35,10 +46,38 @@ def gemini_envelope(text: str) -> dict:
     return {"candidates": [{"content": {"parts": [{"text": text}]}}]}
 
 
+# 1x1 흰색 PNG (base64). processItemImage()의 누끼·webp 파이프라인을 거치도록 흰 픽셀 사용.
+TINY_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8"
+    "//8/AwAI/AL+SsLgFgAAAABJRU5ErkJggg=="
+)
+
+
+def gemini_image_envelope() -> dict:
+    return {"candidates": [{"content": {"parts": [
+        {"inlineData": {"mimeType": "image/png", "data": TINY_PNG_B64}}
+    ]}}]}
+
+
 async def mock_gemini(route, request):
     body = request.post_data or ""
+    # 이미지 모델 호출 — body에 "model":"...image" 또는 responseModalities 포함
+    if "responseModalities" in body or "gemini-2.5-flash-image" in body:
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(gemini_image_envelope()),
+        )
+        return
+
     if "직업 명명가" in body:
         text = JOB_FANTASY
+    elif "운명의 안내자" in body:
+        text = JOB_INTRO
+    elif "종군 기록자" in body:
+        text = COMPLETION_NARRATIVE
+    elif "평판의 기록자" in body:
+        text = REPUTATION_NEW
     elif "퀘스트 기록관" in body:
         text = json.dumps(QUEST_JSON, ensure_ascii=False)
     elif "보물 감정사" in body:
@@ -86,6 +125,16 @@ async def run():
 
         await page.fill("#jobInput", "로봇공학자")
         await page.click("#jobSubmitBtn")
+
+        # 직업 인트로 화면 — 본문/버튼 노출 확인 후 "여정 시작"
+        await page.wait_for_selector("#jobIntro:not(.hidden)")
+        intro_job = (await page.text_content("#introJobName")).strip()
+        assert intro_job == JOB_FANTASY, f"intro job: {intro_job!r}"
+        intro_text = (await page.text_content("#introText")).strip()
+        assert "고대 골렘술사" in intro_text, f"intro text: {intro_text!r}"
+        await page.screenshot(path=str(SHOTS / "02a_job_intro.png"))
+        await page.click("#introStartBtn")
+
         await page.wait_for_selector("#game:not(.hidden)")
         job = (await page.text_content("#charJob")).strip()
         assert job == JOB_FANTASY, f"job mismatch: {job!r}"
@@ -111,7 +160,7 @@ async def run():
         await page.locator(".quest-title").first.click()
         await page.wait_for_selector(".quest-item.expanded")
         fantasy = await page.text_content(".quest-fantasy")
-        assert "마트의 끝없는" in fantasy, f"fantasy: {fantasy!r}"
+        assert "마트라 불리는" in fantasy, f"fantasy: {fantasy!r}"
         await page.locator(".quest-title").first.click()  # 다시 접기
 
         # 4. 완료 → 카드 픽 모달
@@ -119,6 +168,10 @@ async def run():
         await page.wait_for_selector("#cardPickModal:not(.hidden)")
         candidate_count = await page.locator("#cardPickList .card.candidate").count()
         assert candidate_count == 2, f"candidates: {candidate_count}"
+        # deal 애니메이션 완료까지 대기 (모든 후보가 revealed 상태)
+        await page.wait_for_function(
+            "document.querySelectorAll('#cardPickList .card.candidate:not(.revealed)').length === 0"
+        )
         await page.screenshot(path=str(SHOTS / "04_card_pick.png"), full_page=True)
 
         # item_normal 카드 클릭 (있으면)
@@ -132,6 +185,13 @@ async def run():
 
         # 카드 픽 모달 닫힘 확인
         await page.wait_for_selector("#cardPickModal", state="hidden")
+
+        # 카드 픽 후 완수담 모달이 뜨면 닫기 (Step 1 완수담이 큐에서 표시됨)
+        await page.wait_for_selector("#completionModal:not(.hidden)", timeout=5000)
+        completion_text = (await page.text_content("#completionText")).strip()
+        assert "마트" in completion_text, f"completion: {completion_text!r}"
+        await page.click("#completionCloseBtn")
+        await page.wait_for_selector("#completionModal", state="hidden")
 
         # 5. item_normal을 골랐다면 인벤토리에 장비 생김
         if item_count > 0:
