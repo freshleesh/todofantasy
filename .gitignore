@@ -1,5 +1,4 @@
 .venv/
-test_screenshots/
 node_modules/
 .wrangler/
 .dev.vars

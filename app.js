@@ -170,7 +170,7 @@ async function generateJob(input) {
 async function transformQuest(task) {
   const text = await callGemini(buildQuestPrompt(state.character.jobFantasy), task, true);
   const parsed = JSON.parse(text);
-  if (!parsed.fantasy || !['상', '중', '하'].includes(parsed.difficulty)) {
+  if (!parsed.title || !parsed.fantasy || !['상', '중', '하'].includes(parsed.difficulty)) {
     throw new Error('변환 결과 형식 오류');
   }
   return parsed;
@@ -214,7 +214,7 @@ async function addQuest() {
   setBtnBusy(btn, '변환 중...');
 
   try {
-    const { fantasy, difficulty } = await transformQuest(task);
+    const { title, fantasy, difficulty } = await transformQuest(task);
     if (!consumeQuestSlot()) {
       showToast('퀘스트 슬롯이 모두 소진되었습니다');
       return;
@@ -222,6 +222,7 @@ async function addQuest() {
     state.quests.unshift({
       id: Date.now(),
       original: task,
+      title,
       fantasy,
       difficulty,
       done: false,
@@ -475,13 +476,15 @@ function renderQuests() {
     const item = document.createElement('div');
     item.className = `quest-item${q.done ? ' done' : ''} diff-${q.difficulty}`;
     item.dataset.id = q.id;
+    const title = q.title || q.fantasy;
     item.innerHTML = `
       <input type="checkbox" class="quest-checkbox" ${q.done ? 'checked' : ''} title="완료 처리" />
       <div class="quest-content">
-        <div class="quest-fantasy">
+        <div class="quest-title">
           <span class="quest-diff">[${q.difficulty}]</span>
-          ${escapeHtml(q.fantasy)}
+          ${escapeHtml(title)}
         </div>
+        <div class="quest-fantasy">${escapeHtml(q.fantasy)}</div>
         <div class="quest-original">원문: ${escapeHtml(q.original)}</div>
       </div>
       <button class="quest-delete" title="삭제">✕</button>

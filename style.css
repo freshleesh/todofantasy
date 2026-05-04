@@ -209,7 +209,7 @@ button:disabled {
   opacity: 0.6;
 }
 
-.quest-item.done .quest-fantasy {
+.quest-item.done .quest-title {
   text-decoration: line-through;
   color: var(--ink-light);
 }
@@ -233,10 +233,19 @@ button:disabled {
   min-width: 0;
 }
 
-.quest-fantasy {
+.quest-title {
   font-size: 1rem;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--ink);
+  font-weight: 600;
+}
+
+.quest-fantasy {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ink);
+  margin-top: 0.4rem;
+  display: none;
 }
 
 .quest-original {
@@ -247,6 +256,7 @@ button:disabled {
   display: none;
 }
 
+.quest-item.expanded .quest-fantasy,
 .quest-item.expanded .quest-original {
   display: block;
 }

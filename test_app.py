@@ -20,6 +20,7 @@ SHOTS = ROOT / "test_screenshots"
 # ── Mock 응답 ──────────────────────────────────────────
 JOB_FANTASY = "고대 골렘술사"
 QUEST_JSON = {
+    "title": "마트의 미궁",
     "fantasy": "마트의 끝없는 미궁에서 일용할 양식을 구하는 위대한 여정에 나서라.",
     "difficulty": "중",
 }
@@ -93,11 +94,23 @@ async def run():
         await page.fill("#todoInput", "마트에서 장 보기")
         await page.click("#addBtn")
         await page.wait_for_selector(".quest-item")
-        fantasy = await page.text_content(".quest-fantasy")
-        assert "마트의 끝없는" in fantasy, f"fantasy mismatch: {fantasy!r}"
+        title = await page.text_content(".quest-title")
+        assert "마트의 미궁" in title, f"title mismatch: {title!r}"
+        # 본문은 접힌 상태라 보이지 않아야 함
+        fantasy_visible = await page.locator(".quest-fantasy").first.is_visible()
+        assert not fantasy_visible, "quest-fantasy should be hidden by default"
         slot_count = (await page.text_content("#slotCount")).strip()
         assert slot_count == "2 / 3", f"slot count: {slot_count!r}"
-        await page.screenshot(path=str(SHOTS / "03_quest_added.png"))
+        await page.screenshot(path=str(SHOTS / "03_quest_added.png"), full_page=True)
+
+        # 클릭해서 펼치면 본문이 보여야 함
+        await page.locator(".quest-title").first.click()
+        await page.wait_for_selector(".quest-item.expanded")
+        fantasy = await page.text_content(".quest-fantasy")
+        assert "마트의 끝없는" in fantasy, f"fantasy mismatch: {fantasy!r}"
+        await page.screenshot(path=str(SHOTS / "03b_quest_expanded.png"), full_page=True)
+        # 다시 접기 (이후 단계가 접힌 상태 가정)
+        await page.locator(".quest-title").first.click()
 
         # 3. 완료 → XP & 드롭
         await page.click(".quest-checkbox")
